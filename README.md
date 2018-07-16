@@ -2,7 +2,7 @@
 
 xenserver-updater is Bash tool to easily download and apply updates for XenServer
 
-Only Tested on XenServer 7.2 for now, but should work from 6.0 to 7.2
+Only Tested on XenServer 7.2 for now, but should work from 6.2 to 7.2
 
 **inspired by:**
 
@@ -53,11 +53,11 @@ Copy `xs-updater.sh` to your XenServer on root account
 
 if you want to apply updates to a whole XenServer Pool, execute this from the master node:
 
-  POOL_APPLY=yes ./xs-updater.sh apply
+    POOL_APPLY=yes ./xs-updater.sh apply
 
 otherwise:
 
-  POOL_APPLY=no ./xs-updater.sh apply
+    POOL_APPLY=no ./xs-updater.sh apply
 
 ### Debug
 

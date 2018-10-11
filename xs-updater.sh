@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # script version
-readonly VERSION="0.0.1"
+readonly VERSION="0.0.2"
 
 # usage:
 #
@@ -254,13 +254,11 @@ xs_apply_patches()
   fi
 
   if [ "${POOL_APPLY}" == "yes" ] && ! xs_is_master; then
-      echo "This host is not a XenServer Pool Master, launch script without POOL_APPLY=yes"
+      echo "This host is not a XenServer Pool Master, launch script with POOL_APPLY=no"
       exit 1
   fi
 
   echo "Pool apply mode ?: ${POOL_APPLY}"
-
-  local hostname
 
   local xe_patch_cmd
   while read -r patch_id patch_url patch_time patch_uuid
@@ -283,19 +281,30 @@ xs_apply_patches()
 
 }
 
-xs_get_release()
+# grab a key's value from /etc/xensource-inventory
+# usage:
+# xs_get_inventory_key "AN_INVENTORY_KEY"
+xs_get_inventory_key()
 {
-  if [ ! -f "/etc/xensource-inventory" ]; then
-    echo "This is not a XenServer"
+  if [ -z "$1" ]; then
+    echo "xs_get_inventory_key() requires an argument"
     exit 1
   fi
-  XS_RELEASE=$(grep "PRODUCT_VERSION_TEXT_SHORT" /etc/xensource-inventory | cut -d '=' -f2)
-  XS_RELEASE=${XS_RELEASE//\'}
+  local xs_inventory_key=$1
+  local xs_inventory_value
+  xs_inventory_value=$(grep "${xs_inventory_key}" /etc/xensource-inventory | cut -d '=' -f2)
+  echo "${xs_inventory_value//\'}"
+}
+
+xs_get_release()
+{
+  echo "* Detect XenServer release"
+  XS_RELEASE=$(xs_get_inventory_key "PRODUCT_VERSION_TEXT_SHORT")
   XS_VER_MAJOR="${XS_RELEASE:0:1}"
   XS_VER_MINOR="${XS_RELEASE:2:1}"
-  echo "XS release: ${XS_RELEASE}"
-  echo "XS version major: ${XS_VER_MAJOR}"
-  echo "XS version minor: ${XS_VER_MINOR}"
+  echo "> XS release: ${XS_RELEASE}"
+  echo "> XS version major: ${XS_VER_MAJOR}"
+  echo "> XS version minor: ${XS_VER_MINOR}"
 
   readonly XS_RELEASE XS_VER_MAJOR XS_VER_MINOR
 
@@ -304,26 +313,55 @@ xs_get_release()
 xs_get_host_uuid()
 {
   local hostname
-  hostname=$(grep "^HOSTNAME=" /etc/sysconfig/network | awk -F '=' '{print $2}')
+  local installation_uuid control_domain_uuid
+  local inventory_key uuid
 
-  if [ -z "${hostname}" ]; then
-    echo "cannot obtain current XenServer hostname"
-    exit 1
-  else
-    _xe_command "host-list name-label='${hostname}' --minimal"
+  echo "* Detect current host's UUID"
+
+  hostname=$(grep "^HOSTNAME=" /etc/sysconfig/network | awk -F '=' '{print $2}')
+  installation_uuid=$(xs_get_inventory_key "INSTALLATION_UUID")
+  control_domain_uuid=$(xs_get_inventory_key "CONTROL_DOMAIN_UUID")
+
+  echo "> installation_uuid: ${installation_uuid}"
+  echo "> control_domain_uuid: ${control_domain_uuid}"
+  echo "> hostname: ${hostname}"
+
+  # detect host's UUID from inventory uuids
+  for inventory_key in installation_uuid control_domain_uuid
+  do
+    # dereference key to get value
+    uuid="${!inventory_key}"
+    _xe_command "host-list uuid=${uuid} --minimal"
     HOST_UUID="${XE_RESPONSE}"
-    if [ -z "${HOST_UUID}" ]; then
-      echo "hostname not found !"
+    if [ -n "${XE_RESPONSE}" ]; then
+      echo "${inventory_key}'s UUID match this host!"
+      HOST_UUID="${XE_RESPONSE}"
+      break
+    fi
+  done
+
+  # should never happends
+  if [ -z "${HOST_UUID}" ]; then
+    # if the script goes here, there is a XenServer configuration problem
+    echo "Can't detect UUID, trying from hostname"
+    _xe_command "host-list hostname=${hostname} --minimal"
+    if [ -n "${XE_RESPONSE}" ]; then
+      HOST_UUID="${XE_RESPONSE}"
+    else
+      echo "No way to get host UUID, stop!"
       exit 1
     fi
   fi
-  echo "current host UUID:${HOST_UUID}"
+
+  echo "> current host UUID:${HOST_UUID}"
   readonly HOST_UUID
 }
 
 help_die()
 {
-  [ -n "$1" ] && echo "ERROR: $1"
+  if [ -n "$1" ]; then
+    echo -e "\\033[1;31mERROR: $1\\e[0m"
+  fi
 
   cat <<EOF
 Usage:
@@ -375,19 +413,24 @@ case "${ACTION}" in
     ;;
   help|*)
     [ "${ACTION}" == "help" ] && ACTION=
-    help_die "${ACTION}"
+    help_die "action '${ACTION}' is invalid"
     ;;
 esac
 shift
 
+# Ensure we're running on a XenServer host
 if ! XE_BIN=$(command -v xe); then
-  echo "command 'xe' not found, this is not a XenServer Host!"
+  echo "command 'xe' not found, this is not a XenServer host!"
   exit 1
 else
   echo "xe found: ${XE_BIN}"
   readonly XE_BIN
 fi
 
+if [ ! -f "/etc/xensource-inventory" ]; then
+  echo "/etc/xensource-inventory not found, this is not a XenServer host!"
+  exit 1
+fi
 
 xs_get_release
 xs_get_host_uuid

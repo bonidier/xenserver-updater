@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # script version
-readonly VERSION="0.0.2"
+readonly VERSION="0.0.3"
 
 # usage:
 #
@@ -221,7 +221,7 @@ xs_upload_patch()
     local patch_file
 
     patch_id=$1
-    if ! xs_patch_exists "$patch_id"; then
+    if ! xs_patch_exists "${patch_id}"; then
 
       if [ -f "${patch_id}.iso" ]; then
         patch_file="${patch_id}.iso"
@@ -258,14 +258,17 @@ xs_apply_patches()
       exit 1
   fi
 
-  echo "Pool apply mode ?: ${POOL_APPLY}"
+  echo "Pool apply mode: ${POOL_APPLY}"
 
   local xe_patch_cmd
+  local patch_id patch_url patch_time patch_uuid
+
   while read -r patch_id patch_url patch_time patch_uuid
   do
-    echo ">> applying ${patch_id}"
-    echo "> patch_uuid=${patch_uuid}"
+
+    echo -e "\\n-- patch_uuid=${patch_uuid} --"
     if ! xs_patch_is_applied "${patch_uuid}"; then
+      echo ">> applying"
       if [ "${POOL_APPLY}" == "yes" ]; then
         xe_patch_cmd="${XE_CMD_PATCH_POOL_APPLY} uuid=${patch_uuid}"
       else
@@ -273,6 +276,19 @@ xs_apply_patches()
       fi
       if ! _xe_command "${xe_patch_cmd}"; then
         echo "failed to apply patch:"
+        echo "${XE_RESPONSE}"
+        exit 1
+      fi
+    else
+      echo ">> Clean applied patch"
+      if [ "${POOL_APPLY}" == "yes" ] || [ "${HAS_ISO_PATCH}" == "yes" ]; then
+        xe_patch_cmd="${XE_CMD_PATCH_POOL_CLEAN} uuid=${patch_uuid}"
+      else
+        xe_patch_cmd="patch-clean uuid=${patch_uuid}"
+      fi
+
+      if ! _xe_command "${xe_patch_cmd}"; then
+        echo "failed to clean patch:"
         echo "${XE_RESPONSE}"
         exit 1
       fi
@@ -411,10 +427,8 @@ case "${ACTION}" in
     echo "${VERSION}"
     exit 0
     ;;
-  help|*)
-    [ "${ACTION}" == "help" ] && ACTION=
-    help_die "action '${ACTION}' is invalid"
-    ;;
+  help|"") help_die;;
+  *)  help_die "action '${ACTION}' is invalid";;
 esac
 shift
 
@@ -442,11 +456,15 @@ if [ ${XS_VER_MAJOR} -ge 7 ] && [ ${XS_VER_MINOR} -ge 1 ]; then
   XE_CMD_PATCH_LIST="update-list"
   XE_CMD_PATCH_APPLY="update-apply"
   XE_CMD_PATCH_POOL_APPLY="update-pool-apply"
+  XE_CMD_PATCH_POOL_CLEAN="update-pool-clean"
+  HAS_ISO_PATCH="yes"
 else
   XE_CMD_PATCH_UPLOAD="patch-upload"
   XE_CMD_PATCH_LIST="patch-list"
   XE_CMD_PATCH_APPLY="patch-apply"
   XE_CMD_PATCH_POOL_APPLY="patch-pool-apply"
+  XE_CMD_PATCH_POOL_CLEAN="patch-pool-clean"
+  HAS_ISO_PATCH="no"
 fi
 
 # command to execute determined by user input

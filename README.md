@@ -2,7 +2,7 @@
 
 xenserver-updater is Bash tool to easily download and apply updates for XenServer
 
-Only Tested on XenServer 7.2 for now, but should work from 6.2 to 7.2
+Only tested on XenServer 7.2, but should work with others. Any feedback welcomed.
 
 **inspired by:**
 

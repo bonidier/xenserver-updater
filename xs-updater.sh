@@ -48,18 +48,8 @@ xs_build_patches_db()
   local patch_id patch_url patch_time patch_uuid
   local xs_patch_prefix
   local updates_url
-
-  case "${XS_RELEASE}" in
-      "6.2") xs_patch_prefix="XS62";;
-      "6.5") xs_patch_prefix="XS65";;
-      "7.0") xs_patch_prefix="XS70";;
-      "7.1") xs_patch_prefix="XS71";;
-      "7.2") xs_patch_prefix="XS72";;
-      *)
-        echo "${XS_RELEASE} not yet managed"
-        exit 1
-        ;;
-  esac
+  
+  xs_patch_prefix=$( echo "XS${XS_RELEASE}" | sed 's/\.//' )
 
   if [ -z "${xs_patch_prefix}" ]; then
     echo "XS version required"
